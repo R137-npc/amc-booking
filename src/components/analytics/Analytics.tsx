@@ -9,8 +9,16 @@ import {
 } from '@heroicons/react/24/outline';
 
 const Analytics: React.FC = () => {
-  const { bookings } = useBooking();
+  const { bookings, isLoading } = useBooking();
   const { machines, machineTypes } = useMachine();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   const approvedBookings = bookings.filter(b => b.status === 'approved');
   const totalTokensConsumed = approvedBookings.reduce((sum, b) => sum + b.tokens_consumed, 0);

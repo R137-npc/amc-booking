@@ -11,8 +11,16 @@ import {
 
 const TokenManagement: React.FC = () => {
   const { user } = useAuth();
-  const { bookings } = useBooking();
+  const { bookings, isLoading } = useBooking();
   const { machines, machineTypes } = useMachine();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   const userBookings = bookings.filter(booking => booking.user_id === user?.id);
   const tokenTransactions = userBookings.map(booking => {
@@ -27,12 +35,9 @@ const TokenManagement: React.FC = () => {
     };
   });
 
-  // Calculate actual token usage from approved bookings
-  const actualTokensConsumed = userBookings
-    .filter(booking => booking.status === 'approved')
-    .reduce((sum, booking) => sum + booking.tokens_consumed, 0);
-  
-  const actualTokensRemaining = user ? user.tokens_given - actualTokensConsumed : 0;
+  // Use tokens from user profile (calculated by database)
+  const actualTokensConsumed = user?.tokens_consumed || 0;
+  const actualTokensRemaining = user?.tokens_remaining || 0;
   const tokenUsagePercentage = user ? (actualTokensConsumed / user.tokens_given) * 100 : 0;
 
   return (

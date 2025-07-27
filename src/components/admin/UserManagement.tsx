@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useBooking } from '../../contexts/BookingContext';
 import { 
   UsersIcon, 
   PlusIcon, 
@@ -11,6 +10,8 @@ import {
 
 const UserManagement: React.FC = () => {
   const { user, addUser, updateUser, deleteUser, getAllUsers, setUserPassword } = useAuth();
+  const [users, setUsers] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showAddUserForm, setShowAddUserForm] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [showEditUserForm, setShowEditUserForm] = useState(false);
@@ -24,9 +25,24 @@ const UserManagement: React.FC = () => {
     tokens_given: ''
   });
   
-  const users = getAllUsers().filter(u => u.role !== 'amc_admin' && u.role !== 'ima_admin');
+  // Load users on component mount
+  React.useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        setIsLoading(true);
+        const allUsers = await getAllUsers();
+        setUsers(allUsers.filter(u => u.role !== 'amc_admin' && u.role !== 'ima_admin'));
+      } catch (error) {
+        console.error('Error loading users:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-  const handleAddUser = (e: React.FormEvent) => {
+    loadUsers();
+  }, [getAllUsers]);
+
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     const formData = new FormData(e.target as HTMLFormElement);
     
@@ -39,34 +55,61 @@ const UserManagement: React.FC = () => {
       tokens_remaining: parseInt(formData.get('tokens') as string) || 0
     };
     
-    addUser(userData);
-    setShowAddUserForm(false);
-  };
-
-  const handleDeleteUser = (userId: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      deleteUser(userId);
+    try {
+      const newUser = await addUser(userData);
+      setUsers(prev => [...prev, newUser]);
+      setShowAddUserForm(false);
+    } catch (error) {
+      console.error('Error adding user:', error);
+      alert('Error adding user. Please try again.');
     }
   };
 
-  const handleUpdateTokens = (userId: string, newTokens: number) => {
+  const handleDeleteUser = async (userId: string) => {
+    if (confirm('Are you sure you want to delete this user?')) {
+      try {
+        await deleteUser(userId);
+        setUsers(prev => prev.filter(u => u.id !== userId));
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        alert('Error deleting user. Please try again.');
+      }
+    }
+  };
+
+  const handleUpdateTokens = async (userId: string, newTokens: number) => {
     const targetUser = users.find(u => u.id === userId);
     if (targetUser) {
-      updateUser(userId, { 
-        tokens_given: newTokens, 
-        tokens_remaining: newTokens - targetUser.tokens_consumed 
-      });
+      try {
+        await updateUser(userId, { 
+          tokens_given: newTokens, 
+          tokens_remaining: newTokens - targetUser.tokens_consumed 
+        });
+        setUsers(prev => prev.map(u => 
+          u.id === userId 
+            ? { ...u, tokens_given: newTokens, tokens_remaining: newTokens - u.tokens_consumed }
+            : u
+        ));
+      } catch (error) {
+        console.error('Error updating tokens:', error);
+        alert('Error updating tokens. Please try again.');
+      }
     }
   };
 
-  const handleSetPassword = (e: React.FormEvent) => {
+  const handleSetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    setUserPassword(selectedUserEmail, newPassword);
-    alert(`Password updated successfully`);
-    setShowPasswordForm(false);
-    setSelectedUserId('');
-    setSelectedUserEmail('');
-    setNewPassword('');
+    try {
+      await setUserPassword(selectedUserEmail, newPassword);
+      alert(`Password updated successfully`);
+      setShowPasswordForm(false);
+      setSelectedUserId('');
+      setSelectedUserEmail('');
+      setNewPassword('');
+    } catch (error) {
+      console.error('Error setting password:', error);
+      alert('Error setting password. Please try again.');
+    }
   };
 
   const handleEditUser = (userData: any) => {
@@ -79,29 +122,48 @@ const UserManagement: React.FC = () => {
     setShowEditUserForm(true);
   };
 
-  const handleUpdateUser = (e: React.FormEvent) => {
+  const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     
     const newTokensGiven = parseInt(editUserData.tokens_given);
-    const tokensDifference = newTokensGiven - editingUser.tokens_given;
     
-    // Calculate actual tokens consumed from approved bookings
-    const { bookings } = useBooking();
-    const userApprovedBookings = bookings.filter(b => b.user_id === editingUser.id && b.status === 'approved');
-    const actualTokensConsumed = userApprovedBookings.reduce((sum, b) => sum + b.tokens_consumed, 0);
-    
-    updateUser(editingUser.id, {
-      name: editUserData.name,
-      email: editUserData.email,
-      tokens_given: newTokensGiven,
-      tokens_consumed: actualTokensConsumed,
-      tokens_remaining: newTokensGiven - actualTokensConsumed
-    });
-    
-    setShowEditUserForm(false);
-    setEditingUser(null);
-    setEditUserData({ name: '', email: '', tokens_given: '' });
+    try {
+      await updateUser(editingUser.id, {
+        name: editUserData.name,
+        email: editUserData.email,
+        tokens_given: newTokensGiven,
+        tokens_remaining: newTokensGiven - editingUser.tokens_consumed
+      });
+      
+      setUsers(prev => prev.map(u => 
+        u.id === editingUser.id 
+          ? { 
+              ...u, 
+              name: editUserData.name,
+              email: editUserData.email,
+              tokens_given: newTokensGiven,
+              tokens_remaining: newTokensGiven - u.tokens_consumed
+            }
+          : u
+      ));
+      
+      setShowEditUserForm(false);
+      setEditingUser(null);
+      setEditUserData({ name: '', email: '', tokens_given: '' });
+    } catch (error) {
+      console.error('Error updating user:', error);
+      alert('Error updating user. Please try again.');
+    }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   const getRoleDisplayName = (role: string) => {
     switch (role) {
       case 'startup':

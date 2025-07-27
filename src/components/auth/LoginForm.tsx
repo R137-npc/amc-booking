@@ -29,10 +29,11 @@ const LoginForm: React.FC = () => {
 
   // Add a sync button for development/testing
   const handleSync = () => {
-    if (window.confirm('Sync data from other devices? This will refresh the login form.')) {
+    if (window.confirm('Refresh login data? This will reload the page.')) {
       window.location.reload();
     }
   };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
       <div className="max-w-md w-full space-y-8">
@@ -50,7 +51,7 @@ const LoginForm: React.FC = () => {
             onClick={handleSync}
             className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
           >
-            Can't find your account? Click to sync
+            Refresh login data
           </button>
         </div>
 

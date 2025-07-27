@@ -1,18 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User as SupabaseUser } from '@supabase/supabase-js';
+import { supabase } from '../lib/supabase';
 import { User } from '../types';
 
 interface AuthContextType {
   user: User | null;
+  supabaseUser: SupabaseUser | null;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
-  addUser: (userData: Omit<User, 'id' | 'created_at'>) => User;
-  updateUser: (id: string, updates: Partial<User>) => void;
-  deleteUser: (id: string) => void;
-  getAllUsers: () => User[];
-  setUserPassword: (email: string, password: string) => void;
-  getUserById: (id: string) => User | undefined;
-  syncData: () => void;
+  addUser: (userData: Omit<User, 'id' | 'created_at'>) => Promise<User>;
+  updateUser: (id: string, updates: Partial<User>) => Promise<void>;
+  deleteUser: (id: string) => Promise<void>;
+  getAllUsers: () => Promise<User[]>;
+  setUserPassword: (email: string, password: string) => Promise<void>;
+  getUserById: (id: string) => Promise<User | null>;
+  syncData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,202 +28,248 @@ export const useAuth = () => {
   return context;
 };
 
-// Mock users for demonstration
-const mockUsers: User[] = [
-  {
-    id: '1',
-    name: 'Hamani AMC Admin',
-    email: 'admin@hamani.amc',
-    role: 'amc_admin',
-    tokens_given: 0,
-    tokens_consumed: 0,
-    tokens_remaining: 0,
-    created_at: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: '2',
-    name: 'Ramzi IMA Admin',
-    email: 'admin@ramzi.ima',
-    role: 'ima_admin',
-    tokens_given: 0,
-    tokens_consumed: 0,
-    tokens_remaining: 0,
-    created_at: '2024-01-01T00:00:00Z'
-  }
-];
-
-// Central data management with versioning
-const STORAGE_VERSION = '1.0';
-const STORAGE_KEY_PREFIX = 'amc_booking_system_v' + STORAGE_VERSION + '_';
-
-const getStoredData = (key: string, defaultValue: any) => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY_PREFIX + key);
-    return stored ? JSON.parse(stored) : defaultValue;
-  } catch (error) {
-    console.error('Error loading stored data:', error);
-    return defaultValue;
-  }
-};
-
-const saveStoredData = (key: string, data: any) => {
-  try {
-    localStorage.setItem(STORAGE_KEY_PREFIX + key, JSON.stringify(data));
-    // Also save to a backup key with timestamp
-    localStorage.setItem(STORAGE_KEY_PREFIX + key + '_backup', JSON.stringify({
-      data,
-      timestamp: new Date().toISOString()
-    }));
-  } catch (error) {
-    console.error('Error saving data:', error);
-  }
-};
-
-const getStoredPasswords = () => {
-  return getStoredData('userPasswords', {
-    'admin@hamani.amc': 'AMC13719',
-    'admin@ramzi.ima': 'IMA12345'
-  });
-};
-
-const savePasswords = (passwords: { [email: string]: string }) => {
-  saveStoredData('userPasswords', passwords);
-};
-
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [users, setUsers] = useState<User[]>(() => getStoredData('users', mockUsers));
-  const [userPasswords, setUserPasswords] = useState<{ [email: string]: string }>(() => getStoredPasswords());
 
-  // Save users whenever they change
-  useEffect(() => {
-    saveStoredData('users', users);
-  }, [users]);
+  // Load user profile from Supabase
+  const loadUserProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-  // Save passwords whenever they change
-  useEffect(() => {
-    savePasswords(userPasswords);
-  }, [userPasswords]);
+      if (error) {
+        console.error('Error loading user profile:', error);
+        return null;
+      }
 
-  // Sync data across tabs/devices
-  const syncData = () => {
-    const latestUsers = getStoredData('users', mockUsers);
-    const latestPasswords = getStoredPasswords();
-    setUsers(latestUsers);
-    setUserPasswords(latestPasswords);
+      return data as User;
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      return null;
+    }
   };
 
-  // Listen for storage changes from other tabs
+  // Initialize auth state
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key?.startsWith(STORAGE_KEY_PREFIX)) {
-        syncData();
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSupabaseUser(session?.user ?? null);
+      if (session?.user) {
+        loadUserProfile(session.user.id).then(setUser);
       }
-    };
+      setIsLoading(false);
+    });
 
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSupabaseUser(session?.user ?? null);
+        if (session?.user) {
+          const profile = await loadUserProfile(session.user.id);
+          setUser(profile);
+        } else {
+          setUser(null);
+        }
+        setIsLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    // Check for stored user session
-    const storedUser = getStoredData('currentUser', null);
-    if (storedUser) {
-      // Verify user still exists in current user list
-      const userExists = users.find(u => u.id === storedUser.id);
-      if (userExists) {
-        setUser(userExists);
-      } else {
-        // User was deleted, clear session
-        localStorage.removeItem(STORAGE_KEY_PREFIX + 'currentUser');
-      }
-    }
-    setIsLoading(false);
-  }, [users]);
-
   const login = async (email: string, password: string): Promise<boolean> => {
-    // Sync latest data before login attempt
-    syncData();
-    const latestUsers = getStoredData('users', mockUsers);
-    const latestPasswords = getStoredPasswords();
-    
-    // Mock authentication
-    const foundUser = latestUsers.find(u => u.email === email);
-    if (foundUser && latestPasswords[email] === password) {
-      // Update last login
-      const updatedUser = { ...foundUser, last_login: new Date().toISOString() };
-      const updatedUsers = latestUsers.map(u => u.id === foundUser.id ? updatedUser : u);
-      setUsers(updatedUsers);
-      saveStoredData('users', updatedUsers);
-      
-      setUser(updatedUser);
-      saveStoredData('currentUser', updatedUser);
-      return true;
-    }
-    return false;
-  };
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem(STORAGE_KEY_PREFIX + 'currentUser');
-  };
-
-  const addUser = (userData: Omit<User, 'id' | 'created_at'>) => {
-    const newUser: User = {
-      ...userData,
-      id: Date.now().toString(),
-      created_at: new Date().toISOString()
-    };
-    setUsers(prev => [...prev, newUser]);
-    return newUser;
-  };
-
-  const updateUser = (id: string, updates: Partial<User>) => {
-    setUsers(prev => 
-      prev.map(user => 
-        user.id === id ? { ...user, ...updates } : user
-      )
-    );
-    
-    // Update current user session if it's the same user
-    if (user && user.id === id) {
-      const updatedUser = { ...user, ...updates };
-      setUser(updatedUser);
-      saveStoredData('currentUser', updatedUser);
-    }
-  };
-
-  const deleteUser = (id: string) => {
-    const userToDelete = users.find(u => u.id === id);
-    setUsers(prev => prev.filter(user => user.id !== id));
-    
-    // Remove password for deleted user
-    if (userToDelete) {
-      const newPasswords = { ...userPasswords };
-      delete newPasswords[userToDelete.email];
-      setUserPasswords(newPasswords);
-      
-      // If current user was deleted, log them out
-      if (user && user.id === id) {
-        logout();
+      if (error) {
+        console.error('Login error:', error);
+        return false;
       }
+
+      if (data.user) {
+        const profile = await loadUserProfile(data.user.id);
+        setUser(profile);
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Login error:', error);
+      return false;
     }
   };
 
-  const getAllUsers = () => users;
-
-  const setUserPassword = (email: string, password: string) => {
-    setUserPasswords(prev => ({ ...prev, [email]: password }));
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setSupabaseUser(null);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
-  const getUserById = (id: string) => {
-    return users.find(user => user.id === id);
+  const addUser = async (userData: Omit<User, 'id' | 'created_at'>): Promise<User> => {
+    try {
+      // Create auth user first
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: userData.email,
+        password: 'temp123456', // Temporary password
+        email_confirm: true,
+        user_metadata: {
+          name: userData.name,
+          role: userData.role
+        }
+      });
+
+      if (authError) {
+        throw authError;
+      }
+
+      // Create profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .insert({
+          id: authData.user.id,
+          name: userData.name,
+          role: userData.role,
+          tokens_given: userData.tokens_given,
+          tokens_consumed: userData.tokens_consumed,
+          tokens_remaining: userData.tokens_remaining
+        })
+        .select()
+        .single();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      return profileData as User;
+    } catch (error) {
+      console.error('Error adding user:', error);
+      throw error;
+    }
+  };
+
+  const updateUser = async (id: string, updates: Partial<User>): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', id);
+
+      if (error) {
+        throw error;
+      }
+
+      // Update local state if it's the current user
+      if (user && user.id === id) {
+        setUser({ ...user, ...updates });
+      }
+    } catch (error) {
+      console.error('Error updating user:', error);
+      throw error;
+    }
+  };
+
+  const deleteUser = async (id: string): Promise<void> => {
+    try {
+      // Delete auth user (this will cascade to profile)
+      const { error } = await supabase.auth.admin.deleteUser(id);
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      throw error;
+    }
+  };
+
+  const getAllUsers = async (): Promise<User[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      return data as User[];
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
+  };
+
+  const setUserPassword = async (email: string, password: string): Promise<void> => {
+    try {
+      // Get user by email first
+      const { data: users } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .single();
+
+      if (!users) {
+        throw new Error('User not found');
+      }
+
+      // Update password using admin API
+      const { error } = await supabase.auth.admin.updateUserById(users.id, {
+        password: password
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error setting password:', error);
+      throw error;
+    }
+  };
+
+  const getUserById = async (id: string): Promise<User | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) {
+        console.error('Error fetching user:', error);
+        return null;
+      }
+
+      return data as User;
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      return null;
+    }
+  };
+
+  const syncData = async (): Promise<void> => {
+    if (supabaseUser) {
+      const profile = await loadUserProfile(supabaseUser.id);
+      setUser(profile);
+    }
   };
 
   return (
     <AuthContext.Provider value={{ 
       user, 
+      supabaseUser,
       login, 
       logout, 
       isLoading, 

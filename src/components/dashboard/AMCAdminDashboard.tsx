@@ -14,10 +14,17 @@ import {
 } from '@heroicons/react/24/outline';
 
 const AMCAdminDashboard: React.FC = () => {
-  const { user, getUserById } = useAuth();
-  const { bookings } = useBooking();
+  const { user } = useAuth();
+  const { bookings, updateBooking, isLoading } = useBooking();
   const { machines, machineTypes } = useMachine();
-  const { updateBooking } = useBooking();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   const pendingBookings = bookings.filter(booking => booking.status === 'pending');
   const totalBookings = bookings.length;
@@ -29,18 +36,28 @@ const AMCAdminDashboard: React.FC = () => {
 
   const totalTokensConsumed = approvedBookings.reduce((sum, booking) => sum + booking.tokens_consumed, 0);
 
-  const handleApproveBooking = (bookingId: string) => {
-    updateBooking(bookingId, { 
-      status: 'approved',
-      approved_by: user?.id 
-    });
+  const handleApproveBooking = async (bookingId: string) => {
+    try {
+      await updateBooking(bookingId, { 
+        status: 'approved',
+        approved_by: user?.id 
+      });
+    } catch (error) {
+      console.error('Error approving booking:', error);
+      alert('Error approving booking. Please try again.');
+    }
   };
 
-  const handleRejectBooking = (bookingId: string) => {
-    updateBooking(bookingId, { 
-      status: 'rejected',
-      approved_by: user?.id 
-    });
+  const handleRejectBooking = async (bookingId: string) => {
+    try {
+      await updateBooking(bookingId, { 
+        status: 'rejected',
+        approved_by: user?.id 
+      });
+    } catch (error) {
+      console.error('Error rejecting booking:', error);
+      alert('Error rejecting booking. Please try again.');
+    }
   };
 
   return (

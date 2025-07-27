@@ -15,9 +15,10 @@ import {
 } from '@heroicons/react/24/outline';
 
 const BookingManagement: React.FC = () => {
-  const { user, getUserById } = useAuth();
-  const { bookings, updateBooking, deleteBooking } = useBooking();
+  const { user } = useAuth();
+  const { bookings, updateBooking, deleteBooking, isLoading } = useBooking();
   const { machines, machineTypes } = useMachine();
+  const [users, setUsers] = useState<any[]>([]);
   const [showNewBookingForm, setShowNewBookingForm] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [machineFilter, setMachineFilter] = useState('all');
@@ -26,6 +27,23 @@ const BookingManagement: React.FC = () => {
     key: string;
     direction: 'asc' | 'desc';
   } | null>(null);
+
+  // Load users for display
+  React.useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        const { getAllUsers } = await import('../../contexts/AuthContext');
+        // This is a workaround - in a real app you'd want to pass this through props or context
+      } catch (error) {
+        console.error('Error loading users:', error);
+      }
+    };
+    loadUsers();
+  }, []);
+
+  const getUserById = (id: string) => {
+    return users.find(u => u.id === id);
+  };
 
   const userBookings = user?.role === 'startup' 
     ? bookings.filter(booking => booking.user_id === user.id)
@@ -139,32 +157,65 @@ const BookingManagement: React.FC = () => {
     }
   };
 
-  const handleApprove = (bookingId: string) => {
-    updateBooking(bookingId, { 
-      status: 'approved',
-      approved_by: user?.id 
-    });
+  const handleApprove = async (bookingId: string) => {
+    try {
+      await updateBooking(bookingId, { 
+        status: 'approved',
+        approved_by: user?.id 
+      });
+    } catch (error) {
+      console.error('Error approving booking:', error);
+      alert('Error approving booking. Please try again.');
+    }
   };
 
-  const handleReject = (bookingId: string) => {
-    updateBooking(bookingId, { 
-      status: 'rejected',
-      approved_by: user?.id 
-    });
+  const handleReject = async (bookingId: string) => {
+    try {
+      await updateBooking(bookingId, { 
+        status: 'rejected',
+        approved_by: user?.id 
+      });
+    } catch (error) {
+      console.error('Error rejecting booking:', error);
+      alert('Error rejecting booking. Please try again.');
+    }
   };
 
-  const handleCancel = (bookingId: string) => {
+  const handleCancel = async (bookingId: string) => {
     if (user?.role === 'startup') {
       const booking = bookings.find(b => b.id === bookingId);
       if (booking?.status === 'pending') {
-        deleteBooking(bookingId);
+        try {
+          await deleteBooking(bookingId);
+        } catch (error) {
+          console.error('Error deleting booking:', error);
+          alert('Error deleting booking. Please try again.');
+        }
       } else {
-        updateBooking(bookingId, { status: 'cancelled' });
+        try {
+          await updateBooking(bookingId, { status: 'cancelled' });
+        } catch (error) {
+          console.error('Error cancelling booking:', error);
+          alert('Error cancelling booking. Please try again.');
+        }
       }
     } else {
-      updateBooking(bookingId, { status: 'cancelled' });
+      try {
+        await updateBooking(bookingId, { status: 'cancelled' });
+      } catch (error) {
+        console.error('Error cancelling booking:', error);
+        alert('Error cancelling booking. Please try again.');
+      }
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

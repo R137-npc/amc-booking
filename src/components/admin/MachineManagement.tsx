@@ -20,6 +20,7 @@ const MachineManagement: React.FC = () => {
     machines, 
     machineTypes, 
     auditLogs,
+    isLoading,
     addMachine, 
     updateMachine, 
     deleteMachine,
@@ -46,6 +47,14 @@ const MachineManagement: React.FC = () => {
     description: ''
   });
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
   // Group machines by type for display
   const groupedMachines = machines.reduce((groups: any, machine) => {
     const type = machineTypes.find(t => t.id === machine.machine_type_id);
@@ -57,7 +66,7 @@ const MachineManagement: React.FC = () => {
     return groups;
   }, {});
 
-  const handleMachineSubmit = (e: React.FormEvent) => {
+  const handleMachineSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!machineFormData.name || !machineFormData.machine_type_id) {
@@ -72,23 +81,28 @@ const MachineManagement: React.FC = () => {
       custom_token_cost: machineFormData.custom_token_cost ? parseInt(machineFormData.custom_token_cost) : undefined
     };
 
-    if (editingMachine) {
-      updateMachine(editingMachine.id, machineData);
-    } else {
-      addMachine(machineData);
+    try {
+      if (editingMachine) {
+        await updateMachine(editingMachine.id, machineData);
+      } else {
+        await addMachine(machineData);
+      }
+      
+      setShowMachineForm(false);
+      setEditingMachine(null);
+      setMachineFormData({
+        name: '',
+        machine_type_id: '',
+        status: 'available',
+        custom_token_cost: ''
+      });
+    } catch (error) {
+      console.error('Error saving machine:', error);
+      alert('Error saving machine. Please try again.');
     }
-
-    setShowMachineForm(false);
-    setEditingMachine(null);
-    setMachineFormData({
-      name: '',
-      machine_type_id: '',
-      status: 'available',
-      custom_token_cost: ''
-    });
   };
 
-  const handleTypeSubmit = (e: React.FormEvent) => {
+  const handleTypeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!typeFormData.name) {
@@ -96,18 +110,23 @@ const MachineManagement: React.FC = () => {
       return;
     }
 
-    if (editingType) {
-      updateMachineType(editingType.id, typeFormData);
-    } else {
-      addMachineType(typeFormData);
+    try {
+      if (editingType) {
+        await updateMachineType(editingType.id, typeFormData);
+      } else {
+        await addMachineType(typeFormData);
+      }
+      
+      setShowTypeForm(false);
+      setEditingType(null);
+      setTypeFormData({
+        name: '',
+        description: ''
+      });
+    } catch (error) {
+      console.error('Error saving machine type:', error);
+      alert('Error saving machine type. Please try again.');
     }
-
-    setShowTypeForm(false);
-    setEditingType(null);
-    setTypeFormData({
-      name: '',
-      description: ''
-    });
   };
 
   const handleEditMachine = (machine: any) => {
@@ -130,13 +149,18 @@ const MachineManagement: React.FC = () => {
     setShowTypeForm(true);
   };
 
-  const handleDeleteMachine = (machineId: string) => {
+  const handleDeleteMachine = async (machineId: string) => {
     if (confirm('Are you sure you want to delete this machine?')) {
-      deleteMachine(machineId);
+      try {
+        await deleteMachine(machineId);
+      } catch (error) {
+        console.error('Error deleting machine:', error);
+        alert('Error deleting machine. Please try again.');
+      }
     }
   };
 
-  const handleDeleteType = (typeId: string) => {
+  const handleDeleteType = async (typeId: string) => {
     const machinesUsingType = machines.filter(m => m.machine_type_id === typeId);
     if (machinesUsingType.length > 0) {
       alert(`Cannot delete this machine type. ${machinesUsingType.length} machine(s) are using it.`);
@@ -144,12 +168,22 @@ const MachineManagement: React.FC = () => {
     }
     
     if (confirm('Are you sure you want to delete this machine type?')) {
-      deleteMachineType(typeId);
+      try {
+        await deleteMachineType(typeId);
+      } catch (error) {
+        console.error('Error deleting machine type:', error);
+        alert('Error deleting machine type. Please try again.');
+      }
     }
   };
 
-  const handleStatusChange = (machineId: string, newStatus: string) => {
-    updateMachine(machineId, { status: newStatus as any });
+  const handleStatusChange = async (machineId: string, newStatus: string) => {
+    try {
+      await updateMachine(machineId, { status: newStatus as any });
+    } catch (error) {
+      console.error('Error updating machine status:', error);
+      alert('Error updating machine status. Please try again.');
+    }
   };
 
   const getStatusIcon = (status: string) => {

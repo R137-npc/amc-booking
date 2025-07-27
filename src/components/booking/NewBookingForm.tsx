@@ -59,29 +59,35 @@ const NewBookingForm: React.FC<NewBookingFormProps> = ({ onClose }) => {
     const machine = machines.find(m => m.id === formData.machine_id);
     const tokensRequired = Math.ceil(durationHours * (machine?.custom_token_cost || 1));
 
-    // Calculate actual remaining tokens from approved bookings
-    const userBookings = bookings.filter(b => b.user_id === user.id && b.status === 'approved');
-    const consumedTokens = userBookings.reduce((sum, b) => sum + b.tokens_consumed, 0);
-    const actualRemainingTokens = user.tokens_given - consumedTokens;
+    // Use tokens_remaining from user profile (calculated by database)
+    const actualRemainingTokens = user.tokens_remaining;
     
     if (tokensRequired > actualRemainingTokens) {
       setError(`Insufficient tokens. Required: ${tokensRequired}, Available: ${actualRemainingTokens}`);
       return;
     }
 
-    // Create booking
-    addBooking({
-      user_id: user.id,
-      machine_id: formData.machine_id,
-      start_datetime: startDateTime.toISOString(),
-      end_datetime: endDateTime.toISOString(),
-      booking_type: formData.booking_type,
-      status: 'pending',
-      justification: formData.justification || undefined,
-      tokens_consumed: tokensRequired
-    });
+    // Create booking async
+    const createBooking = async () => {
+      try {
+        await addBooking({
+          user_id: user.id,
+          machine_id: formData.machine_id,
+          start_datetime: startDateTime.toISOString(),
+          end_datetime: endDateTime.toISOString(),
+          booking_type: formData.booking_type,
+          status: 'pending',
+          justification: formData.justification || undefined,
+          tokens_consumed: tokensRequired
+        });
+        onClose();
+      } catch (error) {
+        console.error('Error creating booking:', error);
+        setError('Error creating booking. Please try again.');
+      }
+    };
 
-    onClose();
+    createBooking();
   };
 
   return (

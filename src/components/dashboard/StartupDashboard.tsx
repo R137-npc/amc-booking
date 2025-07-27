@@ -13,18 +13,25 @@ import {
 
 const StartupDashboard: React.FC = () => {
   const { user } = useAuth();
-  const { bookings } = useBooking();
+  const { bookings, isLoading } = useBooking();
   const { machines } = useMachine();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   const userBookings = bookings.filter(booking => booking.user_id === user?.id);
   const pendingBookings = userBookings.filter(booking => booking.status === 'pending');
   const confirmedBookings = userBookings.filter(booking => booking.status === 'approved');
   const rejectedBookings = userBookings.filter(booking => booking.status === 'rejected');
 
-  const totalTokensConsumed = confirmedBookings
-    .reduce((sum, booking) => sum + booking.tokens_consumed, 0);
-
-  const actualTokensRemaining = user ? user.tokens_given - totalTokensConsumed : 0;
+  // Use tokens from user profile (calculated by database)
+  const actualTokensRemaining = user?.tokens_remaining || 0;
+  const totalTokensConsumed = user?.tokens_consumed || 0;
 
   // Get upcoming bookings (next 7 days)
   const upcomingBookings = userBookings

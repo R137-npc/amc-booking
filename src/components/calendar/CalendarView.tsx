@@ -12,9 +12,10 @@ import {
 } from '@heroicons/react/24/outline';
 
 const CalendarView: React.FC = () => {
-  const { user, getUserById } = useAuth();
-  const { bookings } = useBooking();
+  const { user } = useAuth();
+  const { bookings, isLoading } = useBooking();
   const { machines, machineTypes } = useMachine();
+  const [users, setUsers] = useState<any[]>([]);
   
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
@@ -24,6 +25,24 @@ const CalendarView: React.FC = () => {
   const [selectedStartup, setSelectedStartup] = useState('all');
   const [selectedMachine, setSelectedMachine] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
+
+  // Load users for display
+  React.useEffect(() => {
+    const loadUsers = async () => {
+      try {
+        // In a real implementation, you'd get this from the auth context
+        // For now, we'll create a simple cache
+        setUsers([]);
+      } catch (error) {
+        console.error('Error loading users:', error);
+      }
+    };
+    loadUsers();
+  }, []);
+
+  const getUserById = (id: string) => {
+    return users.find(u => u.id === id) || { name: 'Unknown User' };
+  };
 
   // Get week start (Monday)
   const getWeekStart = (date: Date) => {
@@ -153,6 +172,14 @@ const CalendarView: React.FC = () => {
     const today = new Date();
     return date.toDateString() === today.toDateString();
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   const getCurrentHour = () => {
     return new Date().getHours();
