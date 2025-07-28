@@ -7,6 +7,7 @@ interface AuthContextType {
   user: User | null;
   supabaseUser: SupabaseUser | null;
   login: (email: string, password: string) => Promise<boolean>;
+  register: (email: string, password: string, name: string) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
   addUser: (userData: Omit<User, 'id' | 'created_at'>) => Promise<User>;
@@ -104,6 +105,36 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       console.error('Login error:', error);
       return false;
+    }
+  };
+
+  const register = async (email: string, password: string, name: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            name: name,
+            role: 'startup'
+          }
+        }
+      });
+
+      if (error) {
+        console.error('Registration error:', error);
+        throw error;
+      }
+
+      if (data.user) {
+        // The profile will be created automatically by the trigger
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
     }
   };
 
@@ -271,6 +302,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       user, 
       supabaseUser,
       login, 
+      register,
       logout, 
       isLoading, 
       addUser, 

@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { BookingProvider } from './contexts/BookingContext';
 import { MachineProvider } from './contexts/MachineContext';
 import LoginForm from './components/auth/LoginForm';
+import RegisterForm from './components/auth/RegisterForm';
 import Dashboard from './components/Dashboard';
 import LoadingSpinner from './components/common/LoadingSpinner';
 
@@ -20,6 +21,10 @@ const AppContent: React.FC = () => {
         <Route 
           path="/login" 
           element={user ? <Navigate to="/dashboard" replace /> : <LoginForm />} 
+        />
+        <Route 
+          path="/register" 
+          element={user ? <Navigate to="/dashboard" replace /> : <RegisterForm />} 
         />
         <Route 
           path="/dashboard" 
